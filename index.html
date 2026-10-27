@@ -1,0 +1,323 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cache Memory Simulator</title>
+
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:Arial,sans-serif;background:#0b1020;color:#f3f6ff}
+header{text-align:center;padding:25px;background:#151d32;border-bottom:1px solid #35415c}
+header h1{margin:0;color:#9baaff}
+header p{color:#a5b0c8}
+main{max-width:1000px;margin:25px auto;padding:15px}
+.panel{background:#151d32;border:1px solid #293651;border-radius:14px;padding:22px;margin-bottom:20px}
+h2{margin-top:0}
+label{display:block;margin:12px 0 6px;color:#b8c3dd}
+input,select{width:100%;padding:12px;border:1px solid #35415c;border-radius:7px;background:#0b1020;color:white}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:15px}
+button{padding:12px 18px;border:0;border-radius:7px;background:#9baaff;color:#10152a;font-weight:bold;cursor:pointer;margin:12px 5px 0 0}
+button.secondary{background:#35d6a0}
+button.reset{background:#35415c;color:white}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px}
+.stat{background:#151d32;border:1px solid #293651;border-radius:10px;padding:15px;text-align:center}
+.stat p{color:#a5b0c8;font-size:13px}
+.stat h2{margin:5px 0;color:#9baaff}
+.hit{color:#35d6a0!important}.miss{color:#ff7185!important}
+.cache{display:grid;grid-template-columns:repeat(auto-fit,minmax(100px,1fr));gap:12px;margin:20px 0}
+.block{background:#0b1020;border:1px solid #35415c;border-radius:9px;padding:20px;text-align:center}
+.block strong{display:block;font-size:25px;margin-top:8px}
+table{width:100%;border-collapse:collapse;min-width:550px}
+th,td{padding:12px;text-align:left;border-bottom:1px solid #35415c;font-size:14px}
+th{color:#a5b0c8}
+.tablewrap{overflow-x:auto}
+.note{color:#a5b0c8;font-size:13px}
+footer{text-align:center;color:#a5b0c8;padding:20px}
+@media(max-width:600px){.stats{grid-template-columns:repeat(2,1fr)}.grid{grid-template-columns:1fr}}
+</style>
+</head>
+
+<body>
+<header>
+<h1>Cache Memory Simulator</h1>
+<p>Computer Organization and Architecture | COA Mini Project</p>
+</header>
+
+<main>
+<section class="panel">
+<h2>Simulation Settings</h2>
+
+<label for="addresses">Memory Address Sequence</label>
+<input id="addresses" value="1, 2, 3, 1, 4, 2, 5, 1">
+
+<div class="grid">
+<div>
+<label for="capacity">Cache Capacity</label>
+<select id="capacity">
+<option value="2">2 Blocks</option>
+<option value="3" selected>3 Blocks</option>
+<option value="4">4 Blocks</option>
+<option value="5">5 Blocks</option>
+</select>
+</div>
+<div>
+<label for="policy">Replacement Algorithm</label>
+<select id="policy">
+<option value="FIFO">FIFO</option>
+<option value="LRU">LRU</option>
+</select>
+</div>
+</div>
+
+<button onclick="runAll()">Run Simulation</button>
+<button class="secondary" onclick="nextStep()">Next Step</button>
+<button class="reset" onclick="resetSim()">Reset</button>
+<p id="message" class="note">Enter addresses and start the simulation.</p>
+</section>
+
+<section class="stats">
+<div class="stat"><p>Total Accesses</p><h2 id="total">0</h2></div>
+<div class="stat"><p>Cache Hits</p><h2 id="hits" class="hit">0</h2></div>
+<div class="stat"><p>Cache Misses</p><h2 id="misses" class="miss">0</h2></div>
+<div class="stat"><p>Hit Ratio</p><h2 id="ratio">0%</h2></div>
+</section>
+
+<section class="panel">
+<h2>Live Cache Memory</h2>
+<p class="note">Watch cache blocks update after each memory access.</p>
+<div id="cache" class="cache">Cache is empty.</div>
+</section>
+
+<section class="panel">
+<h2>Memory Access History</h2>
+<div class="tablewrap">
+<table>
+<thead>
+<tr><th>Step</th><th>Address</th><th>Result</th><th>Replaced</th><th>Cache Contents</th></tr>
+</thead>
+<tbody id="history">
+<tr><td colspan="5">Run the simulation to view results.</td></tr>
+</tbody>
+</table>
+</div>
+<p id="progress" class="note"></p>
+</section>
+
+<section class="panel">
+<h2>Concepts Explained</h2>
+<p><b>Cache Hit:</b> Requested address is already in the cache.</p>
+<p><b>Cache Miss:</b> Requested address is not in the cache.</p>
+<p><b>FIFO:</b> Removes the address that entered the cache first.</p>
+<p><b>LRU:</b> Removes the address that has not been used for the longest time.</p>
+<p><b>Hit Ratio:</b> (Cache Hits / Total Accesses) × 100</p>
+<p class="note">This educational simulator treats each number as a complete cache block address.</p>
+</section>
+</main>
+
+<footer>Cache Memory Simulator | COA Mini Project</footer>
+
+<script>
+let steps = [];
+let current = 0;
+let ready = false;
+
+function makeSteps(addresses, capacity, policy) {
+    let cache = [];
+    let history = [];
+    let hits = 0;
+    let misses = 0;
+
+    addresses.forEach((address, index) => {
+        let position = cache.indexOf(address);
+        let result;
+        let replaced = "-";
+
+        if (position !== -1) {
+            hits++;
+            result = "HIT";
+
+            if (policy === "LRU") {
+                cache.splice(position, 1);
+                cache.push(address);
+            }
+        } else {
+            misses++;
+            result = "MISS";
+
+            if (cache.length >= capacity) {
+                replaced = cache.shift();
+            }
+            cache.push(address);
+        }
+
+        history.push({
+            step: index + 1,
+            address,
+            result,
+            replaced,
+            cache: [...cache],
+            hits,
+            misses
+        });
+    });
+
+    return history;
+}
+
+function prepare() {
+    let raw = document.getElementById("addresses").value.trim();
+    let capacity = Number(document.getElementById("capacity").value);
+    let policy = document.getElementById("policy").value;
+
+    if (!raw) {
+        document.getElementById("message").textContent =
+            "Please enter memory addresses.";
+        return false;
+    }
+
+    let parts = raw.split(/[,\s]+/);
+
+    if (parts.some(x => !/^\d+$/.test(x))) {
+        document.getElementById("message").textContent =
+            "Enter non-negative numbers separated by commas or spaces.";
+        return false;
+    }
+
+    let addresses = parts.map(Number);
+
+    if (addresses.some(x => !Number.isSafeInteger(x)) || addresses.length > 100) {
+        document.getElementById("message").textContent =
+            "Use valid integer addresses and enter no more than 100 addresses.";
+        return false;
+    }
+
+    steps = makeSteps(addresses, capacity, policy);
+    current = 0;
+    ready = true;
+
+    document.getElementById("history").innerHTML = "";
+    document.getElementById("total").textContent = "0";
+    document.getElementById("hits").textContent = "0";
+    document.getElementById("misses").textContent = "0";
+    document.getElementById("ratio").textContent = "0%";
+
+    showCache([], capacity);
+    document.getElementById("progress").textContent =
+        "0 of " + steps.length + " accesses completed.";
+
+    return true;
+}
+
+function showCache(items, capacity, result = "") {
+    let box = document.getElementById("cache");
+    box.innerHTML = "";
+
+    for (let i = 0; i < capacity; i++) {
+        let block = document.createElement("div");
+        block.className = "block";
+
+        if (items[i] !== undefined) {
+            if (result === "HIT") block.classList.add("hit");
+            if (result === "MISS") block.classList.add("miss");
+        }
+
+        let label = document.createElement("span");
+        label.textContent = "Block " + (i + 1);
+
+        let value = document.createElement("strong");
+        value.textContent = items[i] === undefined ? "Empty" : items[i];
+
+        block.append(label, value);
+        box.appendChild(block);
+    }
+}
+
+function nextStep() {
+    if (!ready || current >= steps.length) {
+        if (!prepare()) return;
+    }
+
+    if (current >= steps.length) {
+        document.getElementById("message").textContent =
+            "Simulation complete!";
+        return;
+    }
+
+    let item = steps[current];
+    current++;
+
+    showCache(item.cache, Number(document.getElementById("capacity").value), item.result);
+
+    document.getElementById("total").textContent = current;
+    document.getElementById("hits").textContent = item.hits;
+    document.getElementById("misses").textContent = item.misses;
+    document.getElementById("ratio").textContent =
+        ((item.hits / current) * 100).toFixed(1) + "%";
+
+    let row = document.createElement("tr");
+    [
+        item.step,
+        item.address,
+        item.result,
+        item.replaced,
+        item.cache.join(", ")
+    ].forEach((value, index) => {
+        let cell = document.createElement("td");
+        cell.textContent = value;
+
+        if (index === 2) {
+            cell.className = item.result === "HIT" ? "hit" : "miss";
+        }
+
+        row.appendChild(cell);
+    });
+
+    document.getElementById("history").appendChild(row);
+
+    document.getElementById("message").textContent =
+        "Address " + item.address + ": " + item.result +
+        (item.replaced !== "-" ? " | Replaced: " + item.replaced : "");
+
+    document.getElementById("progress").textContent =
+        current + " of " + steps.length + " accesses completed.";
+
+    if (current === steps.length) {
+        document.getElementById("message").textContent += " All done!";
+    }
+}
+
+function runAll() {
+    if (!ready || current >= steps.length) {
+        if (!prepare()) return;
+    }
+
+    while (current < steps.length) {
+        nextStep();
+    }
+}
+
+function resetSim() {
+    steps = [];
+    current = 0;
+    ready = false;
+
+    document.getElementById("total").textContent = "0";
+    document.getElementById("hits").textContent = "0";
+    document.getElementById("misses").textContent = "0";
+    document.getElementById("ratio").textContent = "0%";
+
+    document.getElementById("cache").textContent = "Cache is empty.";
+    document.getElementById("history").innerHTML =
+        '<tr><td colspan="5">Run the simulation to view results.</td></tr>';
+
+    document.getElementById("message").textContent =
+        "Simulation reset. Enter addresses and start again.";
+    document.getElementById("progress").textContent = "";
+}
+
+resetSim();
+</script>
+</body>
+</html>
